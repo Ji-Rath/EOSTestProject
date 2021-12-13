@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void StartMatchmaking();
 
+	UFUNCTION()
+	void MatchmakingComplete(FName SessionName, bool bSuccess);
+
 	TSharedRef<FOnlineSessionSearch> SearchSettings = MakeShared<FOnlineSessionSearch>();
 
 	IOnlineSubsystem* Subsystem;

@@ -24,6 +24,7 @@ void UEOSGameInstance::Initialize(FSubsystemCollectionBase& Collection)
 			Identity->AddOnLoginCompleteDelegate_Handle(0, FOnLoginComplete::FDelegate::CreateUObject(this, &UEOSGameInstance::HandleLoginComplete));
 			SessionPtr->OnFindSessionsCompleteDelegates.AddUObject(this, &UEOSGameInstance::FindSessionComplete);
 			SessionPtr->OnJoinSessionCompleteDelegates.AddUObject(this, &UEOSGameInstance::JoinSessionComplete);
+			SessionPtr->OnMatchmakingCompleteDelegates.AddUObject(this, &UEOSGameInstance::MatchmakingComplete);
 		}
 	}
 
@@ -132,9 +133,22 @@ void UEOSGameInstance::StartMatchmaking()
 	if (Subsystem)
 	{
 		IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
-		SessionPtr->StartMatchmaking()
 		
+		FOnlineSessionSettings SessionSettings;
+		TSharedRef<FOnlineSessionSearch> MatchmakingSearchSettings;
+		MatchmakingSearchSettings.Get().bIsLanQuery = false;
+		MatchmakingSearchSettings.Get().MaxSearchResults = 10;
+
+		TArray<FUniqueNetIdRef> LocalPlayers;
+		LocalPlayers.Emplace(Subsystem->GetIdentityInterface()->GetUniquePlayerId(0).ToSharedRef());
+		SessionPtr->StartMatchmaking(LocalPlayers, FName(TEXT("Test Session")), SessionSettings, MatchmakingSearchSettings);
 	}
+}
+
+void UEOSGameInstance::MatchmakingComplete(FName SessionName, bool bSuccess)
+{
+	EOnJoinSessionCompleteResult::Type SessionStatus = bSuccess ? EOnJoinSessionCompleteResult::Success : EOnJoinSessionCompleteResult::UnknownError;
+	JoinSessionComplete(SessionName, SessionStatus);
 }
 
 void UEOSGameInstance::BeginDestroy()
