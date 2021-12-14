@@ -5,11 +5,45 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Templates/SharedPointer.h"
-#include "OnlineSessionSettings.h"
 #include "Interfaces/OnlineSessionInterface.h"
+#include "OnlineSubsystem.h"
+#include "OnlineSessionSettings.h"
 #include "EOSGameInstance.generated.h"
 
+USTRUCT(BlueprintType)
+struct FSessionInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	int32 PingInMs;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	FString OwningUserName;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	int32 NumOpenPublicConnections;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	int32 NumPublicConnections;
+
+	FOnlineSessionSearchResult SearchResult;
+
+	FSessionInfo() {};
+
+	FSessionInfo(FOnlineSessionSearchResult Result)
+	{
+		PingInMs = Result.PingInMs;
+		OwningUserName = Result.Session.OwningUserName;
+		NumOpenPublicConnections = Result.Session.NumOpenPublicConnections;
+		NumPublicConnections = Result.Session.SessionSettings.NumPublicConnections;
+		SearchResult = Result;
+	}
+};
+
 class IOnlineSubsystem;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnFindSessions, bool, bSuccess, TArray<FSessionInfo>, Sessions);
 
 /**
  * 
@@ -41,16 +75,19 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void FindSession();
 
-	UFUNCTION(BlueprintCallable)
-	void StartMatchmaking();
-
-	UFUNCTION()
-	void MatchmakingComplete(FName SessionName, bool bSuccess);
-
 	TSharedRef<FOnlineSessionSearch> SearchSettings = MakeShared<FOnlineSessionSearch>();
 
 	IOnlineSubsystem* Subsystem;
 
+	IOnlineSessionPtr SessionPtr;
+
+	IOnlineIdentityPtr Identity;
+
 	void BeginDestroy() override;
 
+	UFUNCTION(BlueprintCallable)
+	bool JoinSession(FSessionInfo SearchResult);
+
+	UPROPERTY(BlueprintAssignable)
+	FOnFindSessions OnFindSessions;
 };

@@ -2,10 +2,10 @@
 
 
 #include "EOSGameInstance.h"
-#include "OnlineSubsystem.h"
-#include "OnlineSubsystemUtils.h"
 #include "Interfaces/OnlineIdentityInterface.h"
+#include "OnlineSessionSettings.h"
 #include "Kismet/GameplayStatics.h"
+#include <EOSTestProject\EOSTestProjectGameMode.h>
 
 void UEOSGameInstance::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -15,8 +15,8 @@ void UEOSGameInstance::Initialize(FSubsystemCollectionBase& Collection)
 
 	if (Subsystem)
 	{
-		IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
-		IOnlineIdentityPtr Identity = Subsystem->GetIdentityInterface();
+		SessionPtr = Subsystem->GetSessionInterface();
+		Identity = Subsystem->GetIdentityInterface();
 
 		if (Identity && SessionPtr)
 		{
@@ -24,7 +24,6 @@ void UEOSGameInstance::Initialize(FSubsystemCollectionBase& Collection)
 			Identity->AddOnLoginCompleteDelegate_Handle(0, FOnLoginComplete::FDelegate::CreateUObject(this, &UEOSGameInstance::HandleLoginComplete));
 			SessionPtr->OnFindSessionsCompleteDelegates.AddUObject(this, &UEOSGameInstance::FindSessionComplete);
 			SessionPtr->OnJoinSessionCompleteDelegates.AddUObject(this, &UEOSGameInstance::JoinSessionComplete);
-			SessionPtr->OnMatchmakingCompleteDelegates.AddUObject(this, &UEOSGameInstance::MatchmakingComplete);
 		}
 	}
 
@@ -39,10 +38,8 @@ void UEOSGameInstance::HandleLoginComplete(int32 LocalUserNum,bool bWasSuccessfu
 
 void UEOSGameInstance::AutoLogin()
 {
-	if (Subsystem)
+	if (Identity)
 	{
-		IOnlineIdentityPtr Identity = Subsystem->GetIdentityInterface();
-
 		if (!Identity->AutoLogin(0 /* LocalUserNum */))
 		{
 			// Call didn't start, return error.
@@ -59,7 +56,7 @@ void UEOSGameInstance::AutoLogin()
 
 void UEOSGameInstance::CreateSession()
 {
-	if (Subsystem)
+	if (SessionPtr)
 	{
 		FOnlineSessionSettings Settings;
 		Settings.bIsDedicated = false;
@@ -70,7 +67,6 @@ void UEOSGameInstance::CreateSession()
 		Settings.bAllowJoinViaPresence = true;
 		Settings.bUsesPresence = true;
 
-		IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
 		SessionPtr->CreateSession(0, FName("Test Session"), Settings);
 		SearchSettings->SearchResults.Empty();
 	}
@@ -80,14 +76,13 @@ void UEOSGameInstance::FindSessionComplete(bool bSuccess)
 {
 	if (bSuccess)
 	{
+		TArray<FSessionInfo> Sessions;
+		Sessions.Reserve(SearchSettings->SearchResults.Num());
 		for (FOnlineSessionSearchResult LobbyResult : SearchSettings->SearchResults)
 		{
-			FString Name = LobbyResult.Session.OwningUserName;
-			UE_LOG(LogTemp, Warning, TEXT("SERVER NAME: %s"), *Name);
-
-			IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
-			SessionPtr->JoinSession(0, FName("Test Session"), LobbyResult);
+			Sessions.Emplace(FSessionInfo(LobbyResult));
 		}
+		OnFindSessions.Broadcast(bSuccess, Sessions);
 	}
 }
 
@@ -95,8 +90,6 @@ void UEOSGameInstance::JoinSessionComplete(FName Name, EOnJoinSessionCompleteRes
 {
 	UE_LOG(LogTemp, Warning, TEXT("JOINED SESSION: %s"), *(Name.ToString()));
 	UE_LOG(LogTemp, Warning, TEXT("RESULT: %s"), LexToString(Result));
-
-	IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
 
 	FString ConnectInfo;
 	SessionPtr->GetResolvedConnectString(Name, ConnectInfo);
@@ -107,6 +100,10 @@ void UEOSGameInstance::CreateSessionComplete(FName Name, bool bSuccess)
 {
 	if (bSuccess)
 	{
+		if (AEOSTestProjectGameMode* GameMode = Cast<AEOSTestProjectGameMode>(GetWorld()->GetAuthGameMode()))
+		{
+			GameMode->RegisterExistingPlayers();
+		}
 		UGameplayStatics::OpenLevel(GetWorld(), FName("ThirdPersonExampleMap"), true, FString("listen"));
 	}
 	else
@@ -117,10 +114,8 @@ void UEOSGameInstance::CreateSessionComplete(FName Name, bool bSuccess)
 
 void UEOSGameInstance::FindSession()
 {
-	if (Subsystem)
+	if (Subsystem && SessionPtr)
 	{
-		IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
-
 		SearchSettings->bIsLanQuery = false;
 		SearchSettings->MaxSearchResults = 50;
 
@@ -128,36 +123,20 @@ void UEOSGameInstance::FindSession()
 	}
 }
 
-void UEOSGameInstance::StartMatchmaking()
-{
-	if (Subsystem)
-	{
-		IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
-		
-		FOnlineSessionSettings SessionSettings;
-		TSharedRef<FOnlineSessionSearch> MatchmakingSearchSettings;
-		MatchmakingSearchSettings.Get().bIsLanQuery = false;
-		MatchmakingSearchSettings.Get().MaxSearchResults = 10;
-
-		TArray<FUniqueNetIdRef> LocalPlayers;
-		LocalPlayers.Emplace(Subsystem->GetIdentityInterface()->GetUniquePlayerId(0).ToSharedRef());
-		SessionPtr->StartMatchmaking(LocalPlayers, FName(TEXT("Test Session")), SessionSettings, MatchmakingSearchSettings);
-	}
-}
-
-void UEOSGameInstance::MatchmakingComplete(FName SessionName, bool bSuccess)
-{
-	EOnJoinSessionCompleteResult::Type SessionStatus = bSuccess ? EOnJoinSessionCompleteResult::Success : EOnJoinSessionCompleteResult::UnknownError;
-	JoinSessionComplete(SessionName, SessionStatus);
-}
-
 void UEOSGameInstance::BeginDestroy()
 {
 	Super::BeginDestroy();
 
-	if (Subsystem)
+	if (SessionPtr)
 	{
-		IOnlineSessionPtr SessionPtr = Subsystem->GetSessionInterface();
 		SessionPtr->DestroySession(FName("Test Session"));
 	}
+}
+
+bool UEOSGameInstance::JoinSession(FSessionInfo SearchResult)
+{
+	if (SessionPtr)
+		return SessionPtr->JoinSession(0, FName("Test Session"), SearchResult.SearchResult);
+
+	return false;
 }

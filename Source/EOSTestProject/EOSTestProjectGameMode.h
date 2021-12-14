@@ -13,6 +13,15 @@ class AEOSTestProjectGameMode : public AGameModeBase
 
 public:
 	AEOSTestProjectGameMode();
+
+	void RegisterExistingPlayers();
+
+	TSharedPtr<const FUniqueNetId> GetNetId(APlayerController* PlayerController);
+
+	void PostLogin(APlayerController* PlayerController) override;
+
+	void PreLogout(APlayerController* PlayerController);
+
 };
 
 
