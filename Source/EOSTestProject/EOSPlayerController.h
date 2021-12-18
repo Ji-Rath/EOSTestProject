@@ -13,7 +13,4 @@ UCLASS()
 class EOSTESTPROJECT_API AEOSPlayerController : public APlayerController
 {
 	GENERATED_BODY()
-
-public:
-	void OnNetCleanup(UNetConnection* Connection) override;
 };
